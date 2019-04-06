@@ -122,20 +122,23 @@ public class Robot extends TimedRobot {
   // DigitalInput limitSwitchIntakeDown;
 
   // Digital Limit
-  
-   double motorCurrents[][] = new double[3][10]; 
-   double avgMotorCurrents[][] = new double[3][10];
-   double maxMotorCurrentThreshold[] = new double[3];
-   public static final int MOTOR_POGO = 0; 	//Rear Lifter
-   public static final int MOTOR_FANGS = 1; //Front lifter 
-   public static final int MOTOR_INTAKE_ARM = 2;	//Intake arm  
-   public static final int MOTOR_TIMEOUT = 2000; //in ms
-   
-   int currentIndex = 0;
-   int avgCurrentIndex = 0;
-   boolean pogoEnabled = true;
-   boolean fangsEnabled = true;
-   boolean intakeArmEnabled = true;
+
+  double motorCurrents[][] = new double[3][10];
+  double avgMotorCurrents[][] = new double[3][10];
+  double maxMotorCurrentThreshold[] = new double[3];
+  public static final int MOTOR_POGO = 0; // Rear Lifter
+  public static final int MOTOR_FANGS = 1; // Front lifter
+  public static final int MOTOR_INTAKE_ARM = 2; // Intake arm
+  public static final double MOTOR_TIMEOUT = 2000; // in ms
+
+  int currentIndex = 0;
+  int avgCurrentIndex = 0;
+  boolean pogoEnabled = true;
+  boolean fangsEnabled = true;
+  boolean intakeArmEnabled = true;
+  double pogoDisableTime = 0;
+  double fangsDisableTime = 0;
+  double intakeArmDisableTime = 0;
 
   // Intake
   int cycles = 0;
@@ -259,17 +262,17 @@ public class Robot extends TimedRobot {
         SmartDashboard.putString("Error", "The the error: " + retval);
         SmartDashboard.putString("Error2", theThePort.readString());
       }
-	  
-	  //initilize current arrays
-	  for(i=0;1<10;i++;)  {
-		  motorCurrents[MOTOR_POGO][i] = 0;
-		  motorCurrents[MOTOR_FANGS][i] = 0;
-		  motorCurrents[MOTOR_INTAKE_ARM][i] = 0;
-		  avgMotorCurrents[MOTOR_POGO][i] = 0;
-		  avgMotorCurrents[MOTOR_FANGS][i] = 0;
-		  avgMotorCurrents[MOTOR_INTAKE_ARM][i] = 0;
-	  }
-	  
+
+      // initilize current arrays
+      for (int i = 0; 1 < 10; i++) {
+        motorCurrents[MOTOR_POGO][i] = 0;
+        motorCurrents[MOTOR_FANGS][i] = 0;
+        motorCurrents[MOTOR_INTAKE_ARM][i] = 0;
+        avgMotorCurrents[MOTOR_POGO][i] = 0;
+        avgMotorCurrents[MOTOR_FANGS][i] = 0;
+        avgMotorCurrents[MOTOR_INTAKE_ARM][i] = 0;
+      }
+
     }
 
     // Create our Pneumatics controls
@@ -292,48 +295,6 @@ public class Robot extends TimedRobot {
       // limitSwitchIntakeDown = new DigitalInput(8);
     }
     climbInitialize = true;
-  }
-  
-  private void digitalMotorLimits () {
-	  //check values and turn on or off motors
-	  for (i=0; i<10; i++;){
-		  
-	  }
-	  
-  }
-  
-  private double getAvgCurrent (motorIndex int) {
-	  double totCurrent = 0;
-	  for(int i = 0; i < 10; i++) {
-		  totCurrent = motorCurrents[motorIndex][i] + totCurrent;
-	  }
-	  return (totCurrent/10);
-  }
-  
-  private void chkMotorCurrents() {
-	  double fangCurrent = Math.max(_frontLifterOne.getOutputCurrent() , _frontLifterOne.getOutputCurrent()); //greatest value since motors work in pair
-	  double pogoCurrent = _rearLifterMotor.getOutputCurrent();
-	  double armCurrent = _intakeLifterMotor.getOutputCurrent();
-	  if (currentIndex < 10) {
-		  motorCurrents[MOTOR_FANGS][currentIndex] = fangCurrent;
-		  motorCurrents[MOTOR_POGO][currentIndex] = pogoCurrent;
-		  motorCurrents[MOTOR_INTAKE_ARM][currentIndex] = armCurrent;
-		  if(currentIndex = 9) {
-			  currentIndex = 0;
-			  avgMotorCurrents[MOTOR_FANGS][avgCurrentIndex] = getAvgCurrent(MOTOR_FANGS);
-			  avgMotorCurrents[MOTOR_POGO][avgCurrentIndex] = getAvgCurrent(MOTOR_POGO);
-			  avgMotorCurrents[MOTOR_INTAKE_ARM][avgCurrentIndex] = getAvgCurrent(MOTOR_INTAKE_ARM);
-			  
-			  if(avgCurrentIndex== 9) {
-				  avgCurrentIndex =0;
-			  } else {
-				  avgCurrentIndex ++;
-			  }
-		  } else {
-			  currentIndex++;
-		  }
-		  
-	  }
   }
 
   @Override
@@ -399,6 +360,9 @@ public class Robot extends TimedRobot {
         pneuVacuum.set(DoubleSolenoid.Value.kReverse);
       }
     }
+
+    // digital limit switch check
+    chkMotorCurrents();
   }
 
   // This, before match has begun, should go periodically until done once
@@ -483,7 +447,11 @@ public class Robot extends TimedRobot {
       }
       // perform climb
       if (limitSwitches && !limitSwitchFrontLift.get()) {
+        // TODO add checks for fangsEnabled, pogpEnabled, and intakeArmEnabled
+        // to motor calls like below or refactor calls method that will check
+        // if(fangsEnabled) {
         frontLifterMotors.set(frontLiftSpeed);
+        // }
       } else if (!limitSwitches) {
         frontLifterMotors.set(frontLiftSpeed);
       }
@@ -610,24 +578,40 @@ public class Robot extends TimedRobot {
         }
       }
       if (targetDegree >= 0 && imuIsWorkingCorrectly) { // Line Tracker Enabled
-        /*if (lTrack0) {
-          turnRotation = turnRotation + turnSpeed(0.3);
-          strafe += 0.6;
+        /*
+         * if (lTrack0) { turnRotation = turnRotation + turnSpeed(0.3); strafe += 0.6;
+         * _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0); } else if
+         * (lTrack4) { turnRotation = turnRotation + turnSpeed(0.3); strafe -= 0.6;
+         * _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0); } else if
+         * (lTrack1) { turnRotation = turnRotation + turnSpeed(0.2); strafe += 0.4;
+         * _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0); } else if
+         * (lTrack3) { turnRotation = turnRotation + turnSpeed(0.2); strafe -= 0.4;
+         * _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0); } else if
+         * (lTrack2) { turnRotation = turnRotation + turnSpeed(0.1);
+         * _mDrive.driveCartesian(0, forwardMotion, turnRotation, 0); } else {
+         * _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0); } } else {
+         * _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0); } } else { //
+         * The the mecanum drive is listed below _mDrive.driveCartesian(strafe,
+         * forwardMotion, turnRotation, 0); }
+         */
+        if (lTrack0) {
+          turnRotation = -(turnRotation + turnSpeed(0.3));
+          strafe = strafe + 0.4;
           _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
         } else if (lTrack4) {
-          turnRotation = turnRotation + turnSpeed(0.3);
-          strafe -= 0.6;
+          turnRotation = -(turnRotation + turnSpeed(0.3));
+          strafe = strafe - 0.4;
           _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
         } else if (lTrack1) {
-          turnRotation = turnRotation + turnSpeed(0.2);
-          strafe += 0.4;
+          turnRotation = -(turnRotation + turnSpeed(0.2));
+          strafe = strafe + 0.25;
           _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
         } else if (lTrack3) {
-          turnRotation = turnRotation + turnSpeed(0.2);
-          strafe -= 0.4;
+          turnRotation = -(turnRotation + turnSpeed(0.2));
+          strafe = strafe - 0.25;
           _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
         } else if (lTrack2) {
-          turnRotation = turnRotation + turnSpeed(0.1);
+          turnRotation = -(turnRotation + turnSpeed(0.1));
           _mDrive.driveCartesian(0, forwardMotion, turnRotation, 0);
         } else {
           _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
@@ -638,36 +622,7 @@ public class Robot extends TimedRobot {
     } else {
       // The the mecanum drive is listed below
       _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
-    }*/
-    if (lTrack0) {
-      turnRotation = -(turnRotation + turnSpeed(0.3));
-      strafe = strafe + 0.4;
-      _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
-    } else if (lTrack4) {
-      turnRotation = -(turnRotation + turnSpeed(0.3));
-      strafe = strafe - 0.4;
-      _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
-    } else if (lTrack1) {
-      turnRotation = -(turnRotation + turnSpeed(0.2));
-      strafe = strafe + 0.25;
-      _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
-    } else if (lTrack3) {
-      turnRotation = -(turnRotation + turnSpeed(0.2));
-      strafe = strafe - 0.25;
-      _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
-    } else if (lTrack2) {
-      turnRotation = -(turnRotation + turnSpeed(0.1));
-      _mDrive.driveCartesian(0, forwardMotion, turnRotation, 0);
-    } else {
-      _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
     }
-  } else {
-    _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
-  }
-} else {
-  // The the mecanum drive is listed below
-  _mDrive.driveCartesian(strafe, forwardMotion, turnRotation, 0);
-}
     if (turnRotation < -0.2 || turnRotation > 0.2) {
       if (pastXDegree == xDegree) {
         xDegreeIterations++;
@@ -696,5 +651,81 @@ public class Robot extends TimedRobot {
   public void testPeriodic() {
     teleopPeriodic();
     runMode = RunningInMode.test;
+  }
+
+  // checks average currents over time and disables or enables motors if needed
+  private void digitalMotorLimits() {
+    double avgFangsCurrent = getAvgCurrent(avgMotorCurrents, MOTOR_FANGS);
+    double avgPogoCurrent = getAvgCurrent(avgMotorCurrents, MOTOR_POGO);
+    double avgIntakeArmCurrent = getAvgCurrent(avgMotorCurrents, MOTOR_INTAKE_ARM);
+    double currentTime = Timer.getMatchTime();
+    if (fangsEnabled && avgFangsCurrent > maxMotorCurrentThreshold[MOTOR_FANGS]) {
+      fangsEnabled = false;
+      fangsDisableTime = currentTime;
+    } else if (!fangsEnabled && avgFangsCurrent <= maxMotorCurrentThreshold[MOTOR_FANGS]
+        && currentTime >= (fangsDisableTime + MOTOR_TIMEOUT)) {
+      fangsEnabled = true;
+      fangsDisableTime = 0;
+    }
+
+    if (pogoEnabled && avgPogoCurrent > maxMotorCurrentThreshold[MOTOR_POGO]) {
+      pogoEnabled = false;
+      pogoDisableTime = currentTime;
+    } else if (!pogoEnabled && avgPogoCurrent <= maxMotorCurrentThreshold[MOTOR_POGO]
+        && currentTime >= (pogoDisableTime + MOTOR_TIMEOUT)) {
+      pogoEnabled = true;
+      pogoDisableTime = 0;
+    }
+
+    if (intakeArmEnabled && avgIntakeArmCurrent > maxMotorCurrentThreshold[MOTOR_INTAKE_ARM]) {
+      intakeArmEnabled = false;
+      intakeArmDisableTime = currentTime;
+    } else if (!intakeArmEnabled && avgIntakeArmCurrent <= maxMotorCurrentThreshold[MOTOR_INTAKE_ARM]
+        && currentTime >= (intakeArmDisableTime + MOTOR_TIMEOUT)) {
+      intakeArmEnabled = true;
+      intakeArmDisableTime = 0;
+    }
+  }
+
+  private double getAvgCurrent(double[][] currentArray, int motorIndex) {
+    double totCurrent = 0;
+    double currentCount = 0;
+    for (int i = 0; i < currentArray.length; i++) {
+      if (currentArray[motorIndex][i] != 0) {
+        totCurrent = currentArray[motorIndex][i] + totCurrent;
+        currentCount++;
+      }
+    }
+    return (totCurrent / currentCount);
+  }
+
+  // This method stores the realtime current and average current of motors
+  private void chkMotorCurrents() {
+    // use greatest current value since motors work in pair
+    double fangCurrent = Math.max(_frontLifterOne.getOutputCurrent(), _frontLifterOne.getOutputCurrent());
+    double pogoCurrent = _rearLifterMotor.getOutputCurrent();
+    double armCurrent = _intakeLifterMotor.getOutputCurrent();
+
+    motorCurrents[MOTOR_FANGS][currentIndex] = fangCurrent;
+    motorCurrents[MOTOR_POGO][currentIndex] = pogoCurrent;
+    motorCurrents[MOTOR_INTAKE_ARM][currentIndex] = armCurrent;
+
+    if (currentIndex < motorCurrents.length) {
+      currentIndex++;
+      // reset currentIndex and calculate avgMotorCurrents if last spot in array
+    } else {
+      currentIndex = 0;
+      avgMotorCurrents[MOTOR_FANGS][avgCurrentIndex] = getAvgCurrent(motorCurrents, MOTOR_FANGS);
+      avgMotorCurrents[MOTOR_POGO][avgCurrentIndex] = getAvgCurrent(motorCurrents, MOTOR_POGO);
+      avgMotorCurrents[MOTOR_INTAKE_ARM][avgCurrentIndex] = getAvgCurrent(motorCurrents, MOTOR_INTAKE_ARM);
+
+      digitalMotorLimits();
+
+      if (avgCurrentIndex < avgMotorCurrents.length) {
+        avgCurrentIndex++;
+      } else {
+        avgCurrentIndex = 0;
+      }
+    }
   }
 }
